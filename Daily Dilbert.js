@@ -20,7 +20,7 @@
 // ⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺
 // • install scriptable
 // • add this script as a new script
-// • create 4 scriptable
+// • create 4 scriptable widgets
 // • select this script for all 4 widgets
 // * each widget should get a number
 //   - 1st widget: 0 (to show the cover, default)
@@ -53,6 +53,7 @@ let DEBUG = false
 
 // ## Configuration 
 let forceDownload = false
+let showInstructions = false
 
 // ## Globals
 let wParameter = []
@@ -96,6 +97,11 @@ async function loadPhotoDilbert(widget) {
     // read given widget-parameters given by user configuration
     let parCount = parseInput(args.widgetParameter)
 
+    if (showInstructions) {
+      showInstallInstructions()
+      return
+    }
+
     // Check, if a comic can be found. Check 5 previous days, if necessary.
     do {
         numTries += 1
@@ -116,7 +122,7 @@ async function loadPhotoDilbert(widget) {
 
     // load Dilberts for the next two days, to be prepared for offline mode
     await preloadDilbertComic(preLoadDays);
-
+    
     // special handling for the cover image
     if (picNum == 0) {
         try {
@@ -241,6 +247,32 @@ function printCoverDate(date) {
     widget.addSpacer()
 }
 
+// print date on cover
+function showInstallInstructions() {
+    let fontSize = 16 // large size widget or app
+
+    if (config.runsInWidget) {
+        fontSize = (config.widgetFamily.indexOf("small") >= 0) ? 8 : fontSize
+    }
+    
+    widget.addSpacer()
+    let instructionStack = widget.addStack()    
+    instructionStr = "🛠 INSTALLATION\n"
+    instructionStr += "• create 4 scriptable widgets\n"
+    instructionStr += "• select this script for all 4\n"
+    instructionStr += "• each widget gets a number\n"
+    instructionStr += "    as parameter\n"
+    instructionStr += "    - 1st widget: 0 (cover)\n"
+    instructionStr += "    - 2nd widget: 1 (1st pic)\n"
+    instructionStr += "    - 3rd widget: 2 (2nd pic)\n"
+    instructionStr += "    - 4th widget: 3 (last pic)\n"
+    instructionStr += "• combine widgets in 1 stack"
+
+    let textLine =  instructionStack.addText(instructionStr)      
+    textLine.font = Font.mediumSystemFont(fontSize)
+    widget.addSpacer()
+}
+
 // Loads images for the next 3 days into local directory
 async function preloadDilbertComic(days) {
     let day = new Date()
@@ -349,10 +381,11 @@ function parseInput(input) {
         }
 
         return wParameter.length
-    } else if (!config.runsInWidget) {
-        // settings for usage in app  
-        DEBUG = true
-        picNum = 2
+    } else {
+        // settings for usage in app or non configured widget 
+        //DEBUG = true
+        //picNum = 2
+        showInstructions = true
     }
     return 0
 }
