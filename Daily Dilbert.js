@@ -42,14 +42,14 @@
 //⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺
 // (2) Support of english Dilbert
 // (3) Support of other comic strips (should have squared single pics)
-// (4) support of other formats (e.g. 4x2 in addition to 3x1) - can be assumed due to image ratio
-// (5) other host for images
 //
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 
 // ## Debug Support
 let DEBUG = false
+const debugArgs = "2, peanuts"   // used in debug environment, to have widget configuration 
+const appArgs = ""           // used in app environment, to have widget configuration 
 
 // ## Configuration 
 let forceDownload = false
@@ -59,14 +59,30 @@ let showInstructions = false
 let wParameter = []
 let picNum = 0
 let widget
-const coverFileName = "dilbert_cover.raw"
-const coverURL = "http://is3.mzstatic.com/image/thumb/Music/v4/c3/43/ba/c343ba75-b088-2d79-2ead-187d9fd864e9/source/600x600sr.jpg"
-const dilbertFileNamePrefix = "dilbert_daily_"
-const dilbertFileNameSuffix = ".raw"
-const preLoadDays = 5
 var fm = FileManager.local() // getFilemanager()
-//let fmConfigDirectory = fm.joinPath(fm.documentsDirectory(), '/dilbertWidget')
 
+// ## Globals to adjust for different Comics (Dilbert, Peanuts)
+// defaults are prepared for dilbert
+// can be overwritten in function parseInput(), if widgetparameter is set to e.g. "peanuts"
+let comic = "dilbert"
+let coverFileName = "dilbert_cover.raw"
+let coverURL = "http://is3.mzstatic.com/image/thumb/Music/v4/c3/43/ba/c343ba75-b088-2d79-2ead-187d9fd864e9/source/600x600sr.jpg"
+let comicFileNamePrefix = "dilbert_daily_"
+let comicFileNameSuffix = ".raw"
+let comicCoverURL = "https://www.ingenieur.de/unterhaltung/dilbert/"  // only for cover. The pics get URL from complete comic image
+let numRows = 1
+let numCols = 3
+let preLoadDays = 5
+let spacerFactor = 22.0 / 313.0     // spacer to the next pic (values are taken from a real pic)
+let blackBorderFactor = 4.0 / 313.0 // black Border shouldn't be shown in widget
+let spacerHeight4CoverSmall = 12
+let spacerHeight4CoverLarge = 45
+let fontColor4Cover = Color.white()
+let font4CoverSmall = Font.thinMonospacedSystemFont(12) 
+let font4CoverLarge = Font.thinMonospacedSystemFont(24) 
+let df4Cover = "yyyy-MM-dd"
+
+    
 
 // Basic widget creation
 //
@@ -76,29 +92,25 @@ function createWidget() {
 }
 
 
-// Load Dilbert-Image from german website
+// Load daily Dilbert (or other) Image from website
 // then update widget
 //
-async function loadPhotoDilbert(widget) {
+async function loadComic(widget) {
     let widgetURL = ""
     let day = new Date()
     let today = new Date()
     let numTries = 0
     let gotStrip = false
     let gotCover = false
-    let DilbertStrip
-    let DilbertCover
-
-
-    // only support for comic strips with 3 pics in 1 row
-    const numRows = 1
-    const numCols = 3
-
+    let comicStrip
+    let comicCover
+    
     // read given widget-parameters given by user configuration
     let parCount = parseInput(args.widgetParameter)
 
     if (showInstructions) {
       showInstallInstructions()
+      widget.url = "https://github.com/JoeGit42/DilbertWidget"
       return
     }
 
@@ -106,13 +118,30 @@ async function loadPhotoDilbert(widget) {
     do {
         numTries += 1
         day = addDay(today, (-1) * (numTries - 1))
-        widgetURL = getDailyDilbertURL(day)
+        switch (comic) {
+          case "peanuts":
+            widgetURL = comicCoverURL;  // in case, of peanuts just go to the startpage. This avoids loading webpage to get deep-image-link
+            break;
+          case "dilbert":
+          default:
+            widgetURL = await getDailyComicURL(day);
+        }
+
         await debug_print_async(widgetURL);
 
         try {
-            DilbertStrip = await fetchDaily(day);
-            if (typeof DilbertStrip === 'object') {
-                gotStrip = true
+            comicStrip = await fetchDaily(day);
+            if (typeof comicStrip === 'object') {
+                // Check, if image has more or less the expected resolution. It should fit to the number of rows and columns.
+                // Sometimes comic strip is completely different than expected. Ignore such images.
+                if (comicStrip.size.width) {
+                    const expectedRatio = (numCols + (numCols-1)*spacerFactor) / (numRows + (numRows-1)*spacerFactor)
+                    const imageRatio = comicStrip.size.width / comicStrip.size.height
+                    // difference in real and expcted ratio is less than 20%
+                    if (Math.abs( (expectedRatio-imageRatio) / expectedRatio) < 0.2) {
+                      gotStrip = true
+                    }
+                }                
             }
         } catch (err) {
 
@@ -120,23 +149,23 @@ async function loadPhotoDilbert(widget) {
     }
     while (numTries < 5 && gotStrip == false)
 
-    // load Dilberts for the next two days, to be prepared for offline mode
-    await preloadDilbertComic(preLoadDays);
+    // load comics for the next n days, to be prepared for offline mode
+    await preloadComic(preLoadDays);
     
     // special handling for the cover image
     if (picNum == 0) {
         try {
-            DilbertCover = await fetchCover();
-            if (typeof DilbertCover === 'object') {
+            comicCover = await fetchCover();
+            if (typeof comicCover === 'object') {
                 gotCover = true
             }
         } catch (err) {
-            widget.addText("no Dilbert cover found :-(")
+            widget.addText("no cover found :-(")
         }
         if (gotCover) {
-            widget.backgroundImage = DilbertCover
+            widget.backgroundImage = comicCover
         }
-        widget.url = "https://www.ingenieur.de/unterhaltung/dilbert/"
+        widget.url = comicCoverURL
         printCoverDate(day)
     } else { // picNum != 0
         // handling of the comic
@@ -152,14 +181,14 @@ async function loadPhotoDilbert(widget) {
             col = minmax(col, 1, numCols)
             row = minmax(row, 1, numRows)
 
-            let singlePic = getSingleComicPicture(DilbertStrip, numRows, numCols, row, col)
+            let singlePic = getSingleComicPicture(comicStrip, numRows, numCols, row, col)
             if (typeof singlePic === 'object') {
                 widget.backgroundImage = singlePic
             }
             widget.url = widgetURL;
 
         } else {
-            widget.addText("no daily Dilbert found :-(")
+            widget.addText("no daily picture found :-(")
         }
     }
     // clear local directory
@@ -171,7 +200,7 @@ function checkImageExists(localPath) {
     //let fm = FileManager.local()
     let dir = fm.documentsDirectory()
     let path = fm.joinPath(dir, localPath)
-    debug_print("" /*+ localPath*/ + "(" + fm.fileSize(path) + " kB)");
+    debug_print("check " + localPath + "(" + fm.fileSize(path) + " kB)");
     return fm.fileExists(path)
 }
 
@@ -189,10 +218,10 @@ async function fetchImage(localPath, remoteURL) {
     try {
         if (fm.fileExists(path)) {
             rawData = await fm.read(path);
-            await debug_print_async("" /*+ localPath*/ + "(" + fm.fileSize(path) + " kB)");
+            await debug_print_async("read " + localPath + "(" + fm.fileSize(path) + " kB)");
             cImage = Image.fromData(rawData)
             if (typeof cImage === 'object') {
-                exists = true
+                file_exists = true
             }
         }
     } catch (err) {
@@ -201,17 +230,19 @@ async function fetchImage(localPath, remoteURL) {
 
     if (forceDownload) file_exists = false
 
-    if (!file_exists) {
-        try {
-            rawData = await loadImage(remoteURL);
-            if (typeof rawData === 'object') {
-                gotRemoteImage = true
-                cImage = Image.fromData(rawData)
-                await fm.write(path, rawData);
-                await debug_print_async("written " /*+ localPath*/ + "(" + fm.fileSize(path) + " kB)");
+    if (!file_exists && remoteURL) {
+        if (remoteURL.length > 5) { // reasonable URL should have lots more than 5 characters
+            try {
+                rawData = await loadImage(remoteURL);
+                if (typeof rawData === 'object') {
+                    gotRemoteImage = true
+                    cImage = Image.fromData(rawData)
+                    await fm.write(path, rawData);
+                    await debug_print_async("written " + localPath + "(" + fm.fileSize(path) + " kB)");
+                }
+            } catch (err) {
+                gotRemoteImage = false
             }
-        } catch (err) {
-            gotRemoteImage = false
         }
     }
 
@@ -226,24 +257,34 @@ async function fetchCover() {
 
 // fetches the daily once, after that the local copy is used
 async function fetchDaily(day) {
-    return await fetchImage(getDailyDilbertLocalFileName(day), getDailyDilbertURL(day));
+    const localFileName = getDailyLocalFileName(day)
+    let remoteURL = null
+    
+    // Only prepare the URL, if image does not exist in cache.
+    // URL preparation in case of peanuts, needs loading of webpage to parse for image url
+    // This avoid loading webpage in this case.
+    if (!checkImageExists(localFileName)) {
+      remoteURL = await getDailyComicURL(day);
+    }
+    
+    return await fetchImage(getDailyLocalFileName(day), remoteURL);
 }
 
 // print date on cover
 function printCoverDate(date) {
-    let dfDate = dfCreateAndInit("yyyy-MM-dd")
-    let fontSize = 24 // large size widget
-    let spacerHeight = 45 // large size widget
+    let dfDate = dfCreateAndInit(df4Cover)
+    let font4Cover = font4CoverLarge // large size widget
+    let spacerHeight = spacerHeight4CoverLarge // large size widget
 
     if (config.runsInWidget) {
-        fontSize = (config.widgetFamily.indexOf("small") >= 0) ? 12 : 24
-        spacerHeight = (config.widgetFamily.indexOf("small") >= 0) ? 12 : 45
-    }
+        font4Cover = (config.widgetFamily.indexOf("small") >= 0) ? font4CoverSmall : font4CoverLarge
+        spacerHeight = (config.widgetFamily.indexOf("small") >= 0) ? spacerHeight4CoverSmall : spacerHeight4CoverLarge
+    } 
     widget.addSpacer(spacerHeight)
     let stack = widget.addStack()
     let dateLine = stack.addText(dfDate.string(date))
-    dateLine.font = Font.thinMonospacedSystemFont(fontSize)
-    dateLine.textColor = Color.white()
+    dateLine.font = font4Cover
+    dateLine.textColor = fontColor4Cover
     widget.addSpacer()
 }
 
@@ -252,20 +293,22 @@ function showInstallInstructions() {
     let fontSize = 16 // large size widget or app
 
     if (config.runsInWidget) {
-        fontSize = (config.widgetFamily.indexOf("small") >= 0) ? 8 : fontSize
+        fontSize = (config.widgetFamily.indexOf("small") >= 0) ? 7 : fontSize
     }
     
-    widget.addSpacer()
+    widget.addSpacer(5)
     let instructionStack = widget.addStack()    
     instructionStr = "🛠 INSTALLATION\n"
-    instructionStr += "• create 4 scriptable widgets\n"
-    instructionStr += "• select this script for all 4\n"
+    instructionStr += "• create x scriptable widgets\n"
+    instructionStr += "• select this script for all\n"
     instructionStr += "• each widget gets a number\n"
-    instructionStr += "    as parameter\n"
-    instructionStr += "    - 1st widget: 0 (cover)\n"
-    instructionStr += "    - 2nd widget: 1 (1st pic)\n"
-    instructionStr += "    - 3rd widget: 2 (2nd pic)\n"
-    instructionStr += "    - 4th widget: 3 (last pic)\n"
+    instructionStr += "   as parameter\n"
+    instructionStr += "   - 1st widget: 0 (cover)\n"
+    instructionStr += "   - 2nd widget: 1 (1st pic)\n"
+    instructionStr += "   - 3rd widget: 2 (2nd pic) ...\n"
+    instructionStr += "• as 2nd parameter select\n"
+    instructionStr += "   comic (dilbert or peanuts)\n"
+    instructionStr += "• e.g.:    2,dilbert\n"
     instructionStr += "• combine widgets in 1 stack"
 
     let textLine =  instructionStack.addText(instructionStr)      
@@ -274,14 +317,14 @@ function showInstallInstructions() {
 }
 
 // Loads images for the next 3 days into local directory
-async function preloadDilbertComic(days) {
+async function preloadComic(days) {
     let day = new Date()
     let localFileName = ""
 
     for (i = 1; i <= days; i++) {
-        localFileName = getDailyDilbertLocalFileName(addDay(day, i))
+        localFileName = getDailyLocalFileName(addDay(day, i))
         if (!checkImageExists(localFileName)) {
-            await fetchImage(localFileName, getDailyDilbertURL(addDay(day, i)));
+            await fetchImage(localFileName, await getDailyComicURL(addDay(day, i)));
         }
     }
 }
@@ -291,15 +334,18 @@ async function preloadDilbertComic(days) {
 // offsets at the borders is not yet supported
 function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) {
     let draw = new DrawContext()
-    let spacerFactor = 22.0 / 313.0 // spacer to the next pic (values are taken from a real pic)
-    let blackBorderFactor = 4.0 / 313.0
+    let diffWidth  = 0
+    let diffHeight = 0
 
-    //draw.respectScreenScale = true // ### should delete blur effect in widget, but doesn't work for any reason
-
+        
+    draw.respectScreenScale = true 
+    draw.opaque = false
+    
     // calculate net size of one pic (inkl. black border)
     let singlePicWidth = img.size.width / (columns + ((columns - 1) * spacerFactor))
     let singlePicHeight = img.size.height / (rows + ((rows - 1) * spacerFactor))
-
+    debug_print ("size: " + singlePicWidth + "x" + singlePicHeight)
+    
     // calculate pos of selected pic
     let ulPoint = new Point(0, 0)
     ulPoint.x = singlePicWidth * (1 + spacerFactor) * (selectedColumn - 1)
@@ -310,34 +356,99 @@ function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) 
     ulPoint.y += singlePicHeight * blackBorderFactor
     singlePicWidth *= (1 - (2 * blackBorderFactor))
     singlePicHeight *= (1 - (2 * blackBorderFactor))
-
-    //draw.size = new Size(singlePicWidth, singlePicHeight)
+    debug_print ("size: " + singlePicWidth + "x" + singlePicHeight)
+    
+    // Make it square and remember the diff
+    // But only if there's a difference bigger than 5%. 
+    // In all other cases, optimization can make it even worth.
+    if ( (Math.abs(singlePicWidth - singlePicHeight) / singlePicWidth) >= 0.05 )
+    {
+      diffWidth  = Math.abs(singlePicWidth - Math.max(singlePicWidth, singlePicHeight))
+      diffHeight = Math.abs(singlePicHeight - Math.max(singlePicWidth, singlePicHeight))
+      singlePicWidth = Math.max(singlePicWidth, singlePicHeight)
+      singlePicHeight = singlePicWidth
+      debug_print ("size: " + singlePicWidth + "x" + singlePicHeight)
+    }
+    
+    // start with a black square
     draw.size = new Size(singlePicWidth, singlePicHeight)
+    draw.setFillColor(Color.black())
+    draw.fill(new Rect(0,0,singlePicWidth,singlePicHeight))
+
+    // move img to the middle
+    if (diffWidth || diffHeight )
+    {  
+      ulPoint.x -= diffWidth/2
+      ulPoint.y -= diffHeight/2
+    }
     ulPoint.x *= (-1)
     ulPoint.y *= (-1)
     draw.drawImageAtPoint(img, ulPoint)
 
+    // Sometimes the border are not accurate.
+    // so daw rectangles on top/bottom or left/right with a small overlap
+    if ( diffHeight > 4 ) // top and bottom
+    {  
+      const borderThickness = (diffHeight/2) + (singlePicHeight*blackBorderFactor)
+      draw.fill(new Rect(0, 0, singlePicWidth, borderThickness))
+      draw.fill(new Rect(0, singlePicHeight - borderThickness, singlePicWidth, borderThickness))
+    }
+    if ( diffWidth > 4 ) // left and right 
+    {  
+      const borderThickness = (diffWidth/2) + (singlePicWidth*blackBorderFactor)
+      draw.fill(new Rect(0, 0, borderThickness, singlePicHeight))
+      draw.fill(new Rect(singlePicWidth - borderThickness, 0, borderThickness, singlePicHeight))
+    }
+
     return draw.getImage()
 }
 
-function getDailyDilbertURL(date) {
-    // e.g. 2020-11-14 results in this URL: https://www.machinebuilding.net/uploads/mbuild/dilbert/dt201114.gif
-    let imgURL = "https://www.ingenieur.de/wp-content/uploads/#yyyy#/#MM#/#dd##MM#.jpg"
+async function getDailyComicURL(date) {
+  let imgURL = ""
+  
+  // build basic URL
+  switch (comic) {
+    case "peanuts":
+      imgURL = "https://www.gocomics.com/peanuts/#yyyy#/#MM#/#dd#"
+      break;
+      case "dilbert":
+      default:
+        imgURL = "https://www.ingenieur.de/wp-content/uploads/#yyyy#/#MM#/#dd##MM#.jpg"
+  }
 
-    // do not build an URL for sundays - have to know the mechanism first
-    let dfReplaceYear = dfCreateAndInit("yyyy")
-    let dfReplaceMonth = dfCreateAndInit("MM")
-    let dfReplaceDay = dfCreateAndInit("dd")
-    imgURL = imgURL.replace(/#yyyy#/g, dfReplaceYear.string(date))
-    imgURL = imgURL.replace(/#MM#/g, dfReplaceMonth.string(date))
-    imgURL = imgURL.replace(/#dd#/g, dfReplaceDay.string(date))
+  let dfReplaceYear = dfCreateAndInit("yyyy")
+  let dfReplaceMonth = dfCreateAndInit("MM")
+  let dfReplaceDay = dfCreateAndInit("dd")
+  imgURL = imgURL.replace(/#yyyy#/g, dfReplaceYear.string(date))
+  imgURL = imgURL.replace(/#MM#/g, dfReplaceMonth.string(date))
+  imgURL = imgURL.replace(/#dd#/g, dfReplaceDay.string(date))
+      
+  switch (comic) {
+    case "peanuts":
+      // get image URL from website
+      const req = new Request(imgURL)
+      try {
+        const html = await req.loadString();
+        var match = html.match(/og:image"\scontent="([^"]+)/)
+        imgURL = match[1] 
+      } catch (e) {
+        imgURL = ""
+      }
+      
+      await debug_print_async ("url: " + imgURL);   
+      break;
+      
+    case "dilbert":
+    default:
+      // nothing special, take imgURL as it is
+  }
 
-    return imgURL
+  return imgURL
 }
 
-function getDailyDilbertLocalFileName(date) {
+function getDailyLocalFileName(date) {
     let dfDate = dfCreateAndInit("yyyy-MM-dd")
-    let local = dilbertFileNamePrefix + dfDate.string(date) + dilbertFileNameSuffix
+    let local = comicFileNamePrefix + dfDate.string(date) + comicFileNameSuffix
     return local
 }
 
@@ -351,7 +462,7 @@ function dfCreateAndInit(format) {
 
 // create widget, load image and push widget
 widget = createWidget();
-await loadPhotoDilbert(widget);
+await loadComic(widget);
 
 // check environment to just display widget content
 // when running from Scriptable app
@@ -364,6 +475,11 @@ if (config.runsInWidget) {
 
 // parses the widget parameters
 function parseInput(input) {
+    if (DEBUG){
+      input = debugArgs
+    } else if (!config.runsInWidget) {
+      input = appArgs
+    }
     if (input != null && input.length > 0) {
         wParameter = input.split(",")
 
@@ -374,17 +490,43 @@ function parseInput(input) {
             picNum = parseInt(wParameter[0])
         }
         if (parCount > 1) {
-            DEBUG = (wParameter[1].indexOf("debug") >= 0)
+            switch (wParameter[1].toLowerCase().trim()) {
+              case "peanuts":
+                comic = "peanuts"
+                coverFileName = comic + "_cover.raw"
+                coverURL = "https://www.peanuts.com/sites/default/files/cb-color.jpg"
+                comicFileNamePrefix = comic + "_daily_"
+                comicFileNameSuffix = ".raw"
+                comicCoverURL = "https://www.gocomics.com/peanuts/"  // only for cover. The pics get URL from complete comic image
+                numRows = 1
+                numCols = 4
+                preLoadDays = 0  // no upcoming comics available 
+                spacerFactor = 11.0 / 211.0 // spacer to the next pic (values are taken from a real pic)
+                blackBorderFactor = 2.0 / 211.0
+                spacerHeight4CoverSmall = 69
+                spacerHeight4CoverLarge = 170
+                font4CoverSmall = Font.semiboldSystemFont(10) 
+                font4CoverLarge = Font.semiboldSystemFont(20) 
+                fontColor4Cover = Color.black()
+                df4Cover = " dd.MM."
+                break;
+              case "dilbert":
+                // nothing to do, as defaults are already prepared for dilbert
+                break;
+             default:    
+              
+            }
         }
         if (parCount > 2) {
-            forceDownload = (wParameter[2] == "force")
+            DEBUG = (wParameter[2].indexOf("debug") >= 0)
+        }
+        if (parCount > 3) {
+            forceDownload = (wParameter[3] == "force")
         }
 
         return wParameter.length
     } else {
-        // settings for usage in app or non configured widget 
-        //DEBUG = true
-        //picNum = 2
+        // settings for non configured widget 
         showInstructions = true
     }
     return 0
@@ -400,13 +542,13 @@ async function clearLocalDir() {
 
     // prepare string-array with filenames, which should not be deleted (previous 2 and a configurable number of next days)
     for (i = -2; i <= preLoadDays; i++) {
-        doNotDelete.push(getDailyDilbertLocalFileName(addDay(today, i)))
+        doNotDelete.push(getDailyLocalFileName(addDay(today, i)))
     }
 
     // get directory content
     let dirContent = fm.listContents(dir)
     for (i = 0; i < dirContent.length; i++) {
-        if (fm.fileName(dirContent[i]).indexOf(dilbertFileNamePrefix) >= 0 || fm.fileName(dirContent[i], true).indexOf(coverFileName) >= 0) {
+        if (fm.fileName(dirContent[i]).indexOf(comicFileNamePrefix) >= 0 || fm.fileName(dirContent[i], true).indexOf(coverFileName) >= 0) {
             // check if candidate to delete is part of list to not delete
             deleteFile = true
             for (u = 0; u < doNotDelete.length; u++) {
@@ -451,7 +593,16 @@ async function hardCleanLocalDir () {
 
 async function loadImage(imgUrl) {
     const req = new Request(imgUrl)
-    return await req.load(); // returns RAW data
+    let rawData = await req.load();
+    let isImage = Image.fromData(rawData)
+    
+    if (isImage) {
+      await debug_print_async("is img " + imgUrl);
+      return rawData
+    } else {
+      await debug_print_async("no img " + imgUrl);
+      return null // return null, if response can not be interpreted as image
+    }
 }
 
 function minmax(num, min, max) {
