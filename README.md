@@ -26,7 +26,7 @@ Widget parameter has to be set to select cover (0) or one iof the three pics (1,
 ![](config.jpg)
 
 ### Known Issues
-
+- 2020-11-23 BUG: Building image URL for daily Dilbert does not work anymore (URL changed). Fix will follow - hopefully today.
 
 ### ChangeLog
 - 2020-11-18 initial version
