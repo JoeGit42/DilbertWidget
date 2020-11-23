@@ -1,9 +1,6 @@
 // Variables used by Scriptable.
 // These must be at the very top of the file. Do not edit.
 // icon-color: cyan; icon-glyph: user-tie;
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: red; icon-glyph: image;
 
 // Platform: iOS 14
 // Application: Scriptable app
@@ -48,7 +45,7 @@
 
 // ## Debug Support
 let DEBUG = false
-const debugArgs = "2, peanuts"   // used in debug environment, to have widget configuration 
+const debugArgs = "2, dilbert"   // used in debug environment, to have widget configuration 
 const appArgs = ""           // used in app environment, to have widget configuration 
 
 // ## Configuration 
@@ -72,7 +69,7 @@ let comicFileNameSuffix = ".raw"
 let comicCoverURL = "https://www.ingenieur.de/unterhaltung/dilbert/"  // only for cover. The pics get URL from complete comic image
 let numRows = 1
 let numCols = 3
-let preLoadDays = 5
+let preLoadDays = 0  // does not really work, as URL-scheme is unpredictable and has to be catche from webpage each day
 let spacerFactor = 22.0 / 313.0     // spacer to the next pic (values are taken from a real pic)
 let blackBorderFactor = 4.0 / 313.0 // black Border shouldn't be shown in widget
 let spacerHeight4CoverSmall = 12
@@ -193,6 +190,7 @@ async function loadComic(widget) {
     }
     // clear local directory
     await clearLocalDir();
+    //await hardCleanLocalDir();
 }
 
 
@@ -403,6 +401,63 @@ function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) 
     return draw.getImage()
 }
 
+async function getDailyDilbertURL(date) {
+  const webpage2parse = "https://www.ingenieur.de/unterhaltung/dilbert/"
+  const req = new Request(webpage2parse)
+  let html = await req.loadString();
+  let df = dfCreateAndInit("dd.MM.yyyy")
+  let start
+  let end
+  let imageStrings = []
+  let imgURL = ""
+    
+  start = html.toLowerCase().indexOf("vom " + df.string(date))
+  if ( start >=0 ) {
+    // found block for this day
+    html = html.substring(start)
+    start = html.toLowerCase().indexOf("srcset=")
+    if ( start >=0 ) {
+      // found srcset
+      html = html.substring(start+8)
+      end = html.indexOf("\"")
+      if ( end > 5 ) {
+        // found end of srcset
+        html = html.substring(0,end-1)
+        imageStrings = html.split(",")
+        let imageStringsCount = imageStrings.length
+        let iBiggest = 0
+        let iBiggestResolution = 0
+        let urlStr = ""
+        let resolutionStr = ""
+        for (i=0; i<imageStringsCount; i++){
+          // try to find the picuture with the biggest resolution
+          imageStrings[i] = imageStrings[i].trim()
+          start = imageStrings[i].indexOf(" ")
+          if (start > 5) {
+            // string has 2 parts (1st part is the URL 2nd part is the resolution
+            urlStr = imageStrings[i].substring(0, start)
+            resolutionStr = imageStrings[i].substring(start)
+            urlStr = urlStr.trim()
+            resolutionStr = resolutionStr.trim()
+            end = resolutionStr.toLowerCase().indexOf("w")
+            if ( end > 0 ){
+              resolutionStr = resolutionStr.substring(0, end)
+            }
+            imageResolution = parseInt(resolutionStr)
+            if (imageResolution > iBiggestResolution || iBiggestResolution==0) {
+              imgURL = urlStr
+              iBiggestResolution = imageResolution
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return imgURL
+ 
+}
+
 async function getDailyComicURL(date) {
   let imgURL = ""
   
@@ -413,7 +468,7 @@ async function getDailyComicURL(date) {
       break;
       case "dilbert":
       default:
-        imgURL = "https://www.ingenieur.de/wp-content/uploads/#yyyy#/#MM#/#dd##MM#.jpg"
+        //imgURL = "https://www.ingenieur.de/wp-content/uploads/#yyyy#/#MM#/#dd##MM#.jpg"
   }
 
   let dfReplaceYear = dfCreateAndInit("yyyy")
@@ -440,7 +495,8 @@ async function getDailyComicURL(date) {
       
     case "dilbert":
     default:
-      // nothing special, take imgURL as it is
+      imgURL = await getDailyDilbertURL(date);
+      await debug_print_async ("url: " + imgURL); 
   }
 
   return imgURL
@@ -568,9 +624,9 @@ async function clearLocalDir() {
     }
 }
 
-/* //- ised to delete dilbert jpg-files. (stored as .raw files now)
+//- ised to delete dilbert jpg-files. (stored as .raw files now)
 async function hardCleanLocalDir () {
-  let fm = FileManager.local()
+  //let fm = FileManager.local()
   let dir = fm.documentsDirectory()
   let path
 
@@ -578,7 +634,8 @@ async function hardCleanLocalDir () {
   let dirContent = fm.listContents(dir)
   await debug_print_async("dir: " + dirContent.length);
   for (i=0; i<dirContent.length; i++) {
-    if ( fm.fileName(dirContent[i]).indexOf("dilbert_") >= 0 && fm.fileName(dirContent[i], true).indexOf(".jpg") >= 0  ) {
+    await debug_print_async("rm check " + fm.fileName(dirContent[i], true));
+    if ( fm.fileName(dirContent[i]).indexOf("dilbert_") >= 0 /*&& fm.fileName(dirContent[i], true).indexOf(".jpg") >= 0 */ ) {
       path = fm.joinPath(dir, dirContent[i])
       try {
         await fm.remove(path);
@@ -589,7 +646,7 @@ async function hardCleanLocalDir () {
     }
   }
 }
-*/
+
 
 async function loadImage(imgUrl) {
     const req = new Request(imgUrl)
@@ -655,3 +712,6 @@ async function debug_print_async(text) {
 
 // We must notify caller that script ended
 Script.complete();
+
+
+//EOF
