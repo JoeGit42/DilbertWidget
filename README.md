@@ -26,9 +26,10 @@ Widget parameter has to be set to select cover (0) or one iof the three pics (1,
 ![](config.jpg)
 
 ### Known Issues
-- 2020-11-23 BUG: Building image URL for daily Dilbert does not work anymore (URL changed). Fix will follow - hopefully today.
+
 
 ### ChangeLog
 - 2020-11-18 initial version
 - 2020-11-20 ADD: If widget is not configured or started in sriptable app, install instructions are shown
 - 2020-11-21 ADD: Support for daily Peanuts (selectable with widget parameter)
+- 2020-11-23 FIX: Building image URL changed to webpage parsing.
