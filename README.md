@@ -16,6 +16,11 @@ Widget parameter has to be set to select cover (0) or one iof the three pics (1,
    - 3rd widget: 2 (to show the 2nd pic of the comic)
    - 4th widget: 3 (to show the last pic of the comic)
 * as 2nd parameter you can change the comic (beside Dilbert, Peanuts are supported)
+* supported comics:
+   - dilbert-de:   german Dilbert 
+   - dilbert-en:  english Dilbert
+   - peanuts:     english Peanuts
+   - garfield:    english Garfield
 * e.g.: 2,peanuts     (to get the 2nd pic of Peanuts comic)
 * combine widgets in one stack
 * if everything works fine, you can now scroll through the daily widget
@@ -25,6 +30,8 @@ Widget parameter has to be set to select cover (0) or one iof the three pics (1,
 ![](movie_peanuts.mov)
 
 ![](movie_dilbert_en.mov)
+
+![](movie_garfield.mov)
 
 ![](config.jpg)
 
@@ -37,3 +44,4 @@ Widget parameter has to be set to select cover (0) or one iof the three pics (1,
 - 2020-11-21 ADD: Support for daily Peanuts (selectable with widget parameter)
 - 2020-11-23 FIX: Building image URL changed to webpage parsing.
 - 2020-11-24 ADD: Support for daily Dilbert in english (selectable with widget parameter 'dilbert-en')
+- 2020-11-24 ADD: Support for daily Garfield in english (selectable with widget parameter 'garfield')
