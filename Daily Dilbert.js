@@ -326,7 +326,6 @@ function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) 
     let diffWidth  = 0
     let diffHeight = 0
 
-        
     draw.respectScreenScale = true 
     draw.opaque = false
     
@@ -346,7 +345,31 @@ function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) 
     singlePicWidth *= (1 - (2 * blackBorderFactor))
     singlePicHeight *= (1 - (2 * blackBorderFactor))
     debug_print ("size: " + singlePicWidth + "x" + singlePicHeight)
-    
+
+    // special-handling for garfield pics, as they do not have equal size
+    if (comic == "garfield" && rows == 1 && columns == 3) {
+      switch ( selectedColumn ) {
+        case 1:
+          singlePicWidth = (292*img.size.width)/900
+          singlePicHeight = (251*img.size.height)/258
+          ulPoint.x = (4*img.size.width)/900
+          ulPoint.y = (4*img.size.height)/258
+          break;
+        case 2:
+          singlePicWidth = (270*img.size.width)/900
+          singlePicHeight = (253*img.size.height)/258
+          ulPoint.x = (315*img.size.width)/900
+          ulPoint.y = (3*img.size.height)/258
+          break;
+        case 3:
+          singlePicWidth = (292*img.size.width)/900
+          singlePicHeight = (251*img.size.height)/258
+          ulPoint.x = (603*img.size.width)/900
+          ulPoint.y = (4*img.size.height)/258
+          break;  
+      } 
+    }
+
     // Make it square and remember the diff
     // But only if there's a difference bigger than 5%. 
     // In all other cases, optimization can make it even worth.
@@ -478,11 +501,17 @@ async function getDailyDilbertDEURL(date) {
 
 async function getDailyComicURL(date) {
   let imgURL = ""
+  let req
+  let html
+  let match
   
   // build basic URL
   switch (comic) {
     case "peanuts":
       imgURL = "https://www.gocomics.com/peanuts/#yyyy#/#MM#/#dd#"
+      break;
+    case "garfield":
+      imgURL = "https://www.gocomics.com/garfield/#yyyy#/#MM#/#dd#"
       break;
       case "dilbert_de":
       case "dilbert_en":
@@ -500,10 +529,23 @@ async function getDailyComicURL(date) {
   switch (comic) {
     case "peanuts":
       // get image URL from website
-      const req = new Request(imgURL)
+      req = new Request(imgURL)
       try {
-        const html = await req.loadString();
-        var match = html.match(/og:image"\scontent="([^"]+)/)
+        html = await req.loadString();
+        match = html.match(/og:image"\scontent="([^"]+)/)
+        imgURL = match[1] 
+      } catch (e) {
+        imgURL = ""
+      }
+      await debug_print_async ("url: " + imgURL);   
+      break;
+
+    case "garfield":
+      // get image URL from website
+      req = new Request(imgURL)
+      try {
+        html = await req.loadString();
+        match = html.match(/og:image"\scontent="([^"]+)/)
         imgURL = match[1] 
       } catch (e) {
         imgURL = ""
@@ -591,6 +633,30 @@ function parseInput(input) {
                 font4CoverLarge = Font.semiboldSystemFont(20) 
                 fontColor4Cover = Color.black()
                 df4Cover = " dd.MM."
+                break;
+
+              case "garfield":
+              case "garfield_en":
+              case "garfield-en":
+              case "garfielden":
+                comic = "garfield"
+                coverFileName = comic + "_cover.raw"
+                coverURL = "https://www.tierwelt.ch/sites/default/files/styles/header_news_2x/public/images/garfield.jpg"
+                comicFileNamePrefix = comic + "_daily_"
+                comicFileNameSuffix = ".raw"
+                comicCoverURL = "https://www.gocomics.com/garfield/"  // only for cover. The pics get URL from complete comic image
+                numRows = 1
+                numCols = 3
+                preLoadDays = 0  // no upcoming comics available 
+                // next 4 values are obsolete, as image size and position is hardcoded
+                spacerFactor = 20.0 / 280.0 // spacer to the next pic (values are taken from a real pic)
+                blackBorderFactor = 3.0 / 280.0
+                spacerHeight4CoverSmall = 150
+                spacerHeight4CoverLarge = 300
+                font4CoverSmall = Font.semiboldSystemFont(10) 
+                font4CoverLarge = Font.semiboldSystemFont(20) 
+                fontColor4Cover = Color.orange()
+                df4Cover = "dd.MM.yyyy"
                 break;
 
               case "dilbert_en":
