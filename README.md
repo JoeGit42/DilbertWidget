@@ -21,7 +21,10 @@ Widget parameter has to be set to select cover (0) or one iof the three pics (1,
 * if everything works fine, you can now scroll through the daily widget
 
 ![](movie.mov)
+
 ![](movie_peanuts.mov)
+
+![](movie_dilbert_en.mov)
 
 ![](config.jpg)
 
@@ -33,3 +36,4 @@ Widget parameter has to be set to select cover (0) or one iof the three pics (1,
 - 2020-11-20 ADD: If widget is not configured or started in sriptable app, install instructions are shown
 - 2020-11-21 ADD: Support for daily Peanuts (selectable with widget parameter)
 - 2020-11-23 FIX: Building image URL changed to webpage parsing.
+- 2020-11-24 ADD: Support for daily Dilbert in english (selectable with widget parameter 'dilbert-en')
