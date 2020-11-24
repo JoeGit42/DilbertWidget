@@ -37,15 +37,13 @@
 // 
 // ToDo / Ideas
 //⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺
-// (2) Support of english Dilbert
-// (3) Support of other comic strips (should have squared single pics)
 //
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 
 // ## Debug Support
 let DEBUG = false
-const debugArgs = "2, dilbert"   // used in debug environment, to have widget configuration 
+const debugArgs = "2, dilbert_en"   // used in debug environment, to have widget configuration 
 const appArgs = ""           // used in app environment, to have widget configuration 
 
 // ## Configuration 
@@ -61,7 +59,7 @@ var fm = FileManager.local() // getFilemanager()
 // ## Globals to adjust for different Comics (Dilbert, Peanuts)
 // defaults are prepared for dilbert
 // can be overwritten in function parseInput(), if widgetparameter is set to e.g. "peanuts"
-let comic = "dilbert"
+let comic = "dilbert_de"
 let coverFileName = "dilbert_cover.raw"
 let coverURL = "http://is3.mzstatic.com/image/thumb/Music/v4/c3/43/ba/c343ba75-b088-2d79-2ead-187d9fd864e9/source/600x600sr.jpg"
 let comicFileNamePrefix = "dilbert_daily_"
@@ -115,14 +113,7 @@ async function loadComic(widget) {
     do {
         numTries += 1
         day = addDay(today, (-1) * (numTries - 1))
-        switch (comic) {
-          case "peanuts":
-            widgetURL = comicCoverURL;  // in case, of peanuts just go to the startpage. This avoids loading webpage to get deep-image-link
-            break;
-          case "dilbert":
-          default:
-            widgetURL = await getDailyComicURL(day);
-        }
+        widgetURL = comicCoverURL;  // in case, of peanuts just go to the startpage. This avoids loading webpage to get deep-image-link
 
         await debug_print_async(widgetURL);
 
@@ -305,7 +296,7 @@ function showInstallInstructions() {
     instructionStr += "   - 2nd widget: 1 (1st pic)\n"
     instructionStr += "   - 3rd widget: 2 (2nd pic) ...\n"
     instructionStr += "• as 2nd parameter select\n"
-    instructionStr += "   comic (dilbert or peanuts)\n"
+    instructionStr += "   comic (dilbert-en or peanuts)\n"
     instructionStr += "• e.g.:    2,dilbert\n"
     instructionStr += "• combine widgets in 1 stack"
 
@@ -401,7 +392,36 @@ function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) 
     return draw.getImage()
 }
 
-async function getDailyDilbertURL(date) {
+async function getDailyDilbertENURL(date) {
+  const webpage2parse = "https://dilbert.com"
+  const req = new Request(webpage2parse)
+  let html = await req.loadString();
+  let df = dfCreateAndInit("yyyy-MM-dd")
+  let start
+  let end
+  let imgURL = ""
+    
+  start = html.toLowerCase().indexOf("data-id=\"" + df.string(date) + "\"")
+  if ( start >=0 ) {
+    // found block for this day
+    html = html.substring(start)
+    start = html.toLowerCase().indexOf("data-image=")
+    if ( start >=0 ) {
+      // found data-image line, which includes url
+      html = html.substring(start+12)
+      end = html.indexOf("\"")
+      if ( end > 5 ) {
+        // found end of srcset
+        html = html.substring(0,end)
+        html = html.trim()
+        imgURL = html
+      }
+    }
+  }
+  return imgURL
+}
+
+async function getDailyDilbertDEURL(date) {
   const webpage2parse = "https://www.ingenieur.de/unterhaltung/dilbert/"
   const req = new Request(webpage2parse)
   let html = await req.loadString();
@@ -453,9 +473,7 @@ async function getDailyDilbertURL(date) {
       }
     }
   }
-
   return imgURL
- 
 }
 
 async function getDailyComicURL(date) {
@@ -466,9 +484,10 @@ async function getDailyComicURL(date) {
     case "peanuts":
       imgURL = "https://www.gocomics.com/peanuts/#yyyy#/#MM#/#dd#"
       break;
-      case "dilbert":
+      case "dilbert_de":
+      case "dilbert_en":
       default:
-        //imgURL = "https://www.ingenieur.de/wp-content/uploads/#yyyy#/#MM#/#dd##MM#.jpg"
+        // no preparation of URL
   }
 
   let dfReplaceYear = dfCreateAndInit("yyyy")
@@ -489,13 +508,17 @@ async function getDailyComicURL(date) {
       } catch (e) {
         imgURL = ""
       }
-      
       await debug_print_async ("url: " + imgURL);   
       break;
       
-    case "dilbert":
+    case "dilbert_en":
+      imgURL = await getDailyDilbertENURL(date);
+      await debug_print_async ("url: " + imgURL); 
+      break;
+      
+    case "dilbert_de":
     default:
-      imgURL = await getDailyDilbertURL(date);
+      imgURL = await getDailyDilbertDEURL(date);
       await debug_print_async ("url: " + imgURL); 
   }
 
@@ -548,6 +571,9 @@ function parseInput(input) {
         if (parCount > 1) {
             switch (wParameter[1].toLowerCase().trim()) {
               case "peanuts":
+              case "peanuts_en":
+              case "peanuts-en":
+              case "peanutsen":
                 comic = "peanuts"
                 coverFileName = comic + "_cover.raw"
                 coverURL = "https://www.peanuts.com/sites/default/files/cb-color.jpg"
@@ -566,8 +592,21 @@ function parseInput(input) {
                 fontColor4Cover = Color.black()
                 df4Cover = " dd.MM."
                 break;
+
+              case "dilbert_en":
+              case "dilbert-en":
+              case "dilberten":
+                // as english version is similar to the german one, only some of the values have to be changed
+                comic = "dilbert_en"
+                comicFileNamePrefix = "dilbert_en_daily_"
+                comicCoverURL = "https://dilbert.com"  // only for cover. The pics get URL from complete comic image
+                break;
+                
+              case "dilbert_de":
+              case "dilbert-de":
+              case "dilbertde":
               case "dilbert":
-                // nothing to do, as defaults are already prepared for dilbert
+                // nothing to change
                 break;
              default:    
               
