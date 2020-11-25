@@ -43,8 +43,11 @@
 
 // ## Debug Support
 let DEBUG = false
-const debugArgs = "2, dilbert_en"   // used in debug environment, to have widget configuration 
+let iDEBUG = false // send debug to textfile on iCloud
+const debugArgs = "2, dilbert"   // used in debug environment, to have widget configuration 
 const appArgs = ""           // used in app environment, to have widget configuration 
+const iDebugConsole = "DailyDilbertConsole.txt"
+
 
 // ## Configuration 
 let forceDownload = false
@@ -55,6 +58,8 @@ let wParameter = []
 let picNum = 0
 let widget
 var fm = FileManager.local() // getFilemanager()
+var ifm = FileManager.iCloud()
+let singlePic
 
 // ## Globals to adjust for different Comics (Dilbert, Peanuts)
 // defaults are prepared for dilbert
@@ -77,7 +82,7 @@ let font4CoverSmall = Font.thinMonospacedSystemFont(12)
 let font4CoverLarge = Font.thinMonospacedSystemFont(24) 
 let df4Cover = "yyyy-MM-dd"
 
-    
+const maxSize4DilbertDE = 800    
 
 // Basic widget creation
 //
@@ -101,6 +106,8 @@ async function loadComic(widget) {
     let comicCover
     
     // read given widget-parameters given by user configuration
+    await debug_print_async("*******************************");
+    await debug_print_async("widget parameter: " + args.widgetParameter);
     let parCount = parseInput(args.widgetParameter)
 
     if (showInstructions) {
@@ -113,7 +120,7 @@ async function loadComic(widget) {
     do {
         numTries += 1
         day = addDay(today, (-1) * (numTries - 1))
-        widgetURL = comicCoverURL;  // in case, of peanuts just go to the startpage. This avoids loading webpage to get deep-image-link
+        widgetURL = comicCoverURL;
 
         await debug_print_async(widgetURL);
 
@@ -141,7 +148,7 @@ async function loadComic(widget) {
     await preloadComic(preLoadDays);
     
     // special handling for the cover image
-    if (picNum == 0) {
+    if (picNum === 0) {
         try {
             comicCover = await fetchCover();
             if (typeof comicCover === 'object') {
@@ -169,7 +176,7 @@ async function loadComic(widget) {
             col = minmax(col, 1, numCols)
             row = minmax(row, 1, numRows)
 
-            let singlePic = getSingleComicPicture(comicStrip, numRows, numCols, row, col)
+            singlePic = await getSingleComicPicture(comicStrip, numRows, numCols, row, col);
             if (typeof singlePic === 'object') {
                 widget.backgroundImage = singlePic
             }
@@ -182,6 +189,8 @@ async function loadComic(widget) {
     // clear local directory
     await clearLocalDir();
     //await hardCleanLocalDir();
+    await debug_print_async("+++++++++++++++++++++++++++++++");
+
 }
 
 
@@ -252,7 +261,7 @@ async function fetchDaily(day) {
     // Only prepare the URL, if image does not exist in cache.
     // URL preparation in case of peanuts, needs loading of webpage to parse for image url
     // This avoid loading webpage in this case.
-    if (!checkImageExists(localFileName)) {
+    if (!checkImageExists(localFileName) || forceDownload) {
       remoteURL = await getDailyComicURL(day);
     }
     
@@ -310,9 +319,11 @@ async function preloadComic(days) {
     let day = new Date()
     let localFileName = ""
 
+    if (days <= 0) { return }
+    
     for (i = 1; i <= days; i++) {
         localFileName = getDailyLocalFileName(addDay(day, i))
-        if (!checkImageExists(localFileName)) {
+        if (!checkImageExists(localFileName) || forceDownload) {
             await fetchImage(localFileName, await getDailyComicURL(addDay(day, i)));
         }
     }
@@ -321,7 +332,7 @@ async function preloadComic(days) {
 // crop image used for comic strips.
 // comic strip with spaces between pics are supported
 // offsets at the borders is not yet supported
-function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) {
+async function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) {
     let draw = new DrawContext()
     let diffWidth  = 0
     let diffHeight = 0
@@ -332,7 +343,6 @@ function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) 
     // calculate net size of one pic (inkl. black border)
     let singlePicWidth = img.size.width / (columns + ((columns - 1) * spacerFactor))
     let singlePicHeight = img.size.height / (rows + ((rows - 1) * spacerFactor))
-    debug_print ("size: " + singlePicWidth + "x" + singlePicHeight)
     
     // calculate pos of selected pic
     let ulPoint = new Point(0, 0)
@@ -344,7 +354,6 @@ function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) 
     ulPoint.y += singlePicHeight * blackBorderFactor
     singlePicWidth *= (1 - (2 * blackBorderFactor))
     singlePicHeight *= (1 - (2 * blackBorderFactor))
-    debug_print ("size: " + singlePicWidth + "x" + singlePicHeight)
 
     // special-handling for garfield pics, as they do not have equal size
     if (comic == "garfield" && rows == 1 && columns == 3) {
@@ -379,23 +388,26 @@ function getSingleComicPicture(img, rows, columns, selectedRow, selectedColumn) 
       diffHeight = Math.abs(singlePicHeight - Math.max(singlePicWidth, singlePicHeight))
       singlePicWidth = Math.max(singlePicWidth, singlePicHeight)
       singlePicHeight = singlePicWidth
-      debug_print ("size: " + singlePicWidth + "x" + singlePicHeight)
     }
     
-    // start with a black square
     draw.size = new Size(singlePicWidth, singlePicHeight)
-    draw.setFillColor(Color.black())
-    draw.fill(new Rect(0,0,singlePicWidth,singlePicHeight))
 
     // move img to the middle
-    if (diffWidth || diffHeight )
+    if ( diffWidth || diffHeight )
     {  
       ulPoint.x -= diffWidth/2
       ulPoint.y -= diffHeight/2
     }
     ulPoint.x *= (-1)
     ulPoint.y *= (-1)
-    draw.drawImageAtPoint(img, ulPoint)
+
+    await debug_print_async ("call drawImageAtPoint()");
+    try {
+      draw.drawImageAtPoint(img, ulPoint)
+    } catch (e) {
+      await debug_print_async ("fail drawImageAtPoint(); size: " + singlePicWidth + "x" + singlePicHeight );
+    }
+    await debug_print_async ("back from drawImageAtPoint()");
 
     // Sometimes the border are not accurate.
     // so daw rectangles on top/bottom or left/right with a small overlap
@@ -473,7 +485,7 @@ async function getDailyDilbertDEURL(date) {
         let urlStr = ""
         let resolutionStr = ""
         for (i=0; i<imageStringsCount; i++){
-          // try to find the picuture with the biggest resolution
+          // try to find the picuture with the biggest resolution (but not bigger than maxSize4DilbertDE)
           imageStrings[i] = imageStrings[i].trim()
           start = imageStrings[i].indexOf(" ")
           if (start > 5) {
@@ -487,9 +499,11 @@ async function getDailyDilbertDEURL(date) {
               resolutionStr = resolutionStr.substring(0, end)
             }
             imageResolution = parseInt(resolutionStr)
-            if (imageResolution > iBiggestResolution || iBiggestResolution==0) {
-              imgURL = urlStr
-              iBiggestResolution = imageResolution
+            await debug_print_async("found pic with " + imageResolution + "px");
+            if (imageResolution <= maxSize4DilbertDE && imageResolution > iBiggestResolution) {
+               imgURL = urlStr 
+               iBiggestResolution = imageResolution
+               await debug_print_async("choosen " + imageResolution);
             }
           }
         }
@@ -528,18 +542,6 @@ async function getDailyComicURL(date) {
       
   switch (comic) {
     case "peanuts":
-      // get image URL from website
-      req = new Request(imgURL)
-      try {
-        html = await req.loadString();
-        match = html.match(/og:image"\scontent="([^"]+)/)
-        imgURL = match[1] 
-      } catch (e) {
-        imgURL = ""
-      }
-      await debug_print_async ("url: " + imgURL);   
-      break;
-
     case "garfield":
       // get image URL from website
       req = new Request(imgURL)
@@ -550,18 +552,18 @@ async function getDailyComicURL(date) {
       } catch (e) {
         imgURL = ""
       }
-      await debug_print_async ("url: " + imgURL);   
+      await debug_print_async ("peanuts/garfield url: " + imgURL);   
       break;
       
     case "dilbert_en":
       imgURL = await getDailyDilbertENURL(date);
-      await debug_print_async ("url: " + imgURL); 
+      await debug_print_async ("dilbert_en url: " + imgURL); 
       break;
       
     case "dilbert_de":
     default:
       imgURL = await getDailyDilbertDEURL(date);
-      await debug_print_async ("url: " + imgURL); 
+      await debug_print_async ("dilbert_de url: " + imgURL); 
   }
 
   return imgURL
@@ -722,7 +724,7 @@ async function clearLocalDir() {
                 try {
                     await fm.remove(path);
                 } catch (err) {
-                    debug_print("fail rm " + fm.fileName(dirContent[i], true))
+                    await debug_print_async ("fail rm " + fm.fileName(dirContent[i], true));
                 }
             }
         }
@@ -805,14 +807,25 @@ function debug_print(text) {
 }
 
 async function debug_print_async(text) {
-    if (!DEBUG) {
-        return
+    if (iDEBUG && comic == "dilbert_de") {
+      let dir = ifm.documentsDirectory()
+      let path = ifm.joinPath(dir, iDebugConsole)
+      let dfTimestamp = dfCreateAndInit("yyyy-MM-dd HH:mm:ss.SSS")
+      let now = new Date()
+      let debug_output = ""
+      
+      try { await ifm.downloadFileFromiCloud(path); } catch (e) {}
+      try { debug_output = await ifm.readString(path); } catch (e) {}
+      debug_output =  dfTimestamp.string(now) + " " + text + "\n" + debug_output
+      try { await ifm.writeString(path, debug_output); } catch (e) {}
     }
 
-    let debugRow = widget.addStack()
-    let debugText = debugRow.addText(text)
-    debugText.font = Font.mediumSystemFont(8)
-    debugText.textColor = Color.blue()
+    if (DEBUG) {
+      let debugRow = widget.addStack()
+      let debugText = debugRow.addText(text)
+      debugText.font = Font.mediumSystemFont(8)
+      debugText.textColor = Color.blue()
+    }
 }
 
 // We must notify caller that script ended
