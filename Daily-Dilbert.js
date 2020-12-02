@@ -415,13 +415,13 @@ async function getSingleComicPicture(img, rows, columns, selectedRow, selectedCo
     {  
       const borderThickness = (diffHeight/2) + (singlePicHeight*blackBorderFactor)
       draw.fill(new Rect(0, 0, singlePicWidth, borderThickness))
-      draw.fill(new Rect(0, singlePicHeight - borderThickness, singlePicWidth, borderThickness))
+      draw.fill(new Rect(0, singlePicHeight - borderThickness, singlePicWidth, borderThickness+1))  // +1 to avoid small line at the bottom, caused by rounding errors
     }
     if ( diffWidth > 4 ) // left and right 
     {  
       const borderThickness = (diffWidth/2) + (singlePicWidth*blackBorderFactor)
       draw.fill(new Rect(0, 0, borderThickness, singlePicHeight))
-      draw.fill(new Rect(singlePicWidth - borderThickness, 0, borderThickness, singlePicHeight))
+      draw.fill(new Rect(singlePicWidth - borderThickness, 0, borderThickness+1, singlePicHeight))  // +1 to avoid small line at the bottom, caused by rounding errors
     }
 
     return draw.getImage()
