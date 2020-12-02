@@ -46,3 +46,4 @@ Widget parameter has to be set to select cover (0) or one iof the three pics (1,
 - 2020-11-24 ADD: Support for daily Dilbert in english (selectable with widget parameter 'dilbert-en')
 - 2020-11-24 ADD: Support for daily Garfield in english (selectable with widget parameter 'garfield')
 - 2020-11-24 FIX: In some cases the widget was not able to handle images with higher resolution (limited now)
+- 2020-12-02 FIX: In some cases there was a small line at the bottom of the widget
